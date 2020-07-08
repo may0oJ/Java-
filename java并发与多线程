@@ -1,0 +1,28 @@
+1.sychronized 与lock的区别 和使用场景
+
+synchronized在java源码层级上的实现是通过加入synchronized关键字实现的，其可以对对象，方法或是class进行上锁，
+当然上锁的原则我们通常是越精细越好，这样不容易对其他的业务逻辑代码造成影响同时效率高，在字节码层面上，
+synchronized映射成字节码指令就是在锁定的部分的代码前后各加上了一个moniterenetr和moniterexit；（对方法加锁时
+是通过ACC_SYNCHRONIZED标识符来进行上锁的）
+在锁的执行过程中，锁可能会经历以下几个阶段：首先是对象被new出来，之后在默认情况下给对象加上一个
+偏向锁，偏向锁会默认有一个4秒的时延，我们可以通过指令将其关闭（-xx：BiasedLockingStartupDelay=0），
+如果线程与其他线程存在竞争关系那么偏向锁会升级成轻量级锁或者又可以称为自旋锁，其是用CAS的自旋方式实现的，此时mark word
+中有62位用来记录指向线程栈中的Lock Record的指针
+但自旋的过程中是占用CPU的，因此当竞争进一步加剧，自旋次数达到一定数值后，自旋锁会向操作系统申请调配更多资源，
+从而将其升级成为重量级锁，此后将不再自旋消耗CPU。在汇编层级，synchronized的实现是通过-lock -cmpxchg实现的。
+
+synchronized加在static修饰的方法上锁的是class对象，synchronized（this）锁的是当前对象实例也就是new出来的对象，
+synchronized（）锁的也是当前对象实例。
+
+锁的信息是记录在对象的mark word里（8byte），mark word包含的信息有hashcode，分代年龄（4bit），偏向锁位（1bit），
+锁标志位（2bit）。
+
+synchronized有三种方法，sleep()进入睡眠状态让给别的线程睡眠结束后进入等待队列,yield()进入线程的等待队列中，返回就绪状态,
+join()运行t2线程时调t1.join()会进入t1的线程运行，运行完成后再返回t2.
+
+锁消除：StringBuffer是线程安全的，如sb.append(str1).append(str2)，因为sb只在add方法中使用不可能被其他线程所引用（局部变量，栈私有）
+JVM会自动消除StringBuffer对象内部的锁。
+
+锁粗化：把多次锁的请求合并成为一个请求，以降低短时间内大量的锁的请求、同步、释放所带来的性能损耗；例如一个执行100w次的循环，可以把锁加到
+循环外部。
+

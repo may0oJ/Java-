@@ -43,7 +43,38 @@ loadfactor是装载因子，默认是0.75，也可自己指定其使用方法是
 
 6.HashMap的遍历方法及其特点
 答：
-a.for each map.keyset() 当只需要键值时
-b.for each map.entryset()
+a.for each map.keyset() 当只需要k值时，推荐使用
+b.for each map.entryset() 当需要v值及k值时，推荐使用
+c.for each map.values() 当只需要v值时，推荐使用
+d.map.entrySet().iterator() 通过Map.entrySet使用iterator遍历key和value
+
+7.HashMap, LinkedHashMap, TreeMap有什么区别？
+答:HashMap中的key值存储是根据hash计算出的地址随机存储的，因此是无序的；而LinkdeHashMap和TreeMap都是有序的，其中，LinkedHashMap内部通过给每个node添加after和before属性
+使其内部维护了一个双向链表，使其可以根据插入顺序或者访问顺序进行遍历；而TreeMap是按照key的自然顺序或者comparator定义的排序规则进行排序的，内部是通过红黑树实现的。
+HashMap和LinkedHashMap都支持一个键为null，多个值为null；TreeMap支持值为null，但键为null由于其比较器自身的问题，例如当key类型为String时我们默认用的是String类的compareTo()
+方法，而这时如果写入一个键值对其中Key为null，会报出NullPointerException;虽然也可以自己传入比较器已实现可以存储null键，但使用get()方法获取其value的时候仍会出现问题，因此一般
+不用TreeMap存储null键。
+HashMap和LinkedHashMap中put和get等方法的时间复杂度都可视为O(1),而TreeMap中的get，put，containsKey，remove操作时间复杂度都是O(log(n))；
+HashMap的遍历速度与其数组的长度以及键值对的实际数量有关，而LinkedHashMap的遍历速度只与其实际数据量有关。
+
+8.HashMap, LinkedHashMap, TreeMap使用场景？
+答：一般情况下，当对顺序没有要求只是为了实现键值对的插入删除查找等操作时优先使用HashMap；
+当对保持插入顺序或者访问顺序有需求时，使用LinkedHashMap；
+当需要按照自然顺序或是自定义的比较规则遍历键的时候使用TreeMap。
+
+9.HashMap和HashTable的区别？
+答：
+a.HashTable使用了synchronized字段修饰方法，因此是线程安全的；但HashMap线程不安全；
+b.HashMap支持一个Null键多个Null值，但HashTable不支持任何Null为键或者值，会抛出NullPointerException；
+c.HashMap初始默认大小为16，loadfactor为0.75，每次扩容为之前的2倍，或通过tableSizeFor()方法将传入的初始capacity向上取到最近接的2的整数次幂的容量，
+HashTable初始默认大小为11，loadfactor为0.75，扩容每次变为之前的2n+1，或者直接使用传入的capacity参数作为容量；
+d.HashMap计算存储地址使用hash函数对key的hashcode()进行计算，再用IndexFor()计算地址；
+HashTable直接使用key的(hashcode()&0x7FFFFFFF)%tab.length简单的取模计算得出index，其中0x7FFFFFFF是十六进制整型中的最大值。
+e.HashMap继承于AbstractMap，而HashTable继承于旧类Dictionary。
+
+10.Java 中的另一个线程安全的与 HashMap 极其类似的类是什么？同样是线程安全，它与 HashTable 在线程同步上有什么不同？
+答：ConcurrentHashMap 类（是 Java并发包 java.util.concurrent 中提供的一个线程安全且高效的 HashMap 实现）。
+HashTable 是使用 synchronize 关键字加锁的原理（就是对对象加锁）；
+而针对 ConcurrentHashMap，在 JDK 1.7 中采用 分段锁的方式；JDK 1.8 中直接采用了CAS（无锁算法）+ synchronized。
 
 

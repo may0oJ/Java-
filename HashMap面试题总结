@@ -8,9 +8,10 @@
 put方法的基本流程是，存储对象时：
 1.将K/V键值传入put()方法；
 2.首先检查数组是否初始化，若尚未初始化则初始化一个哈希数组（这里可能会调用resize方法）；
-2.5如果Key为null，则调用PutForNullKey（value）方法，将其放到index为0的桶的位置，如果table[0]的链表已存在键为null的元素，则将新value赋值给它；没有则创建新Entry。
+2.5如果Key为null，在1.7中则调用PutForNullKey（value）方法，将其放到index为0的桶的位置；1.8中在hash方法中直接判断是否键为null，若为null则直接返回0；
+如果table[0]的链表已存在键为null的元素，则将新value赋值给它；没有则创建新Entry。
 3.将Key的hashcode通过hash函数（扰动函数，1.7中4次位运算4次异或，1.8中hashcode前16位与后16位进行异或运算）得到其对应的hash值，然后通过indexFor
-方法将hash值与当前数组的长度-1进行&运算，得到的即为其对应的存储的地址。
+方法将hash值与当前数组的长度-1进行&运算(1.7中的实现，1.8中取消了indexfor方法直接在putval方法中实现)，得到的即为其对应的存储的地址。
 4.检查该下标的位置是否存在键，若已存在，则遍历链表检查是否有与该键相同的entry存在，若有则直接覆盖为新的value；若遍历链表发现没有相同的key的entry，则在链表尾部建立新的
 entry（1.7采用头插法，但在多个线程同时插入一个entry的时候若同时发生了扩容，则有可能会导致出现环形链表；1.8改用尾插法从而避免了这种情况的发生）。
 4.5在插入时同时还会检查当前是否为红黑树结构，若是则会采用树的插入方法。
@@ -36,7 +37,7 @@ hash函数的两大特性就是要求计算简单并且可以达到散列地址�
 5.HashMap的table的容量如何确定？loadFactor是什么？该容量如何变化？这种变化会带来什么问题？
 答：table容量是由capacity参数来确定的，构建hashmap时如不指定capacity会默认是16，也可以自己指定capacity，但会经过tableSizeFor()方法向上取到与其最接近的2的整数次幂，1除外，得到的
 结果还是1；capacity的范围是1<=cap<=1<<30;
-loadfactor是装载因子，默认是0.75，也可自己指定其使用方法是用当前的capacity*loadfactor，如果当前的size大于了这个值，那么就会触发resize方法进行扩容；
+loadfactor是装载因子，默认是0.75，也可自己指定。其使用方法是用当前的capacity*loadfactor，如果当前的size大于了这个值，那么就会触发resize方法进行扩容；
 
 扩容会将新容量变为之前的2倍，即array的长度变为2倍，之后要重新计算map中各个key对应的桶下标，具体方法为若key的hash值之前取到的最高位的前一位是0的话，
 那么地址不变；如果是1的话，那么新地址就是原地址+旧容量大小；如果数据很大的情况下，扩容时将会带来性能的损失，如果在性能要求很高的情况下，可能会造成重大的影响。
@@ -68,7 +69,7 @@ a.HashTable使用了synchronized字段修饰方法，因此是线程安全的；
 b.HashMap支持一个Null键多个Null值，但HashTable不支持任何Null为键或者值，会抛出NullPointerException；
 c.HashMap初始默认大小为16，loadfactor为0.75，每次扩容为之前的2倍，或通过tableSizeFor()方法将传入的初始capacity向上取到最近接的2的整数次幂的容量，
 HashTable初始默认大小为11，loadfactor为0.75，扩容每次变为之前的2n+1，或者直接使用传入的capacity参数作为容量；
-d.HashMap计算存储地址使用hash函数对key的hashcode()进行计算，再用IndexFor()计算地址；
+d.HashMap计算存储地址使用hash函数对key的hashcode()进行计算，再与tab.length-1进行&运算；
 HashTable直接使用key的(hashcode()&0x7FFFFFFF)%tab.length简单的取模计算得出index，其中0x7FFFFFFF是十六进制整型中的最大值。
 e.HashMap继承于AbstractMap，而HashTable继承于旧类Dictionary。
 
@@ -76,5 +77,67 @@ e.HashMap继承于AbstractMap，而HashTable继承于旧类Dictionary。
 答：ConcurrentHashMap 类（是 Java并发包 java.util.concurrent 中提供的一个线程安全且高效的 HashMap 实现）。
 HashTable 是使用 synchronize 关键字加锁的原理（就是对对象加锁）；
 而针对 ConcurrentHashMap，在 JDK 1.7 中采用 分段锁的方式；JDK 1.8 中直接采用了CAS（无锁算法）+ synchronized。
+
+11.HashMap & ConcurrentHashMap 的区别？
+答：HashMap没有上锁机制，是线程不安全的；ConcurrentHashMap采用CAS+synchronized的方法实现了线程安全；
+HashMap支持一个键为null多个值为null，而ConcurrentHashMap均不支持。
+
+12.为什么 ConcurrentHashMap 比 HashTable 效率要高？
+答：在HashTable中其对所有的put，get方法上锁，虽然保证了线程安全，但是锁的粒度过大，同一时间只有一个线程可以对其进行操作，多个线程竞争一把锁容易阻塞；
+而ConcurrentHashMap，在jdk 1.7中采用分段锁的机制，每个segment分配一把锁，这样多个线程可以同时对不同的segment进行操作，锁粒度是基于segment的，一个segment包含多个HashEntry；
+在jdk 1.8中使用CAS+synchronized+Node，锁粒度：Node(首结点，实现Map。Entry<K,V>)，锁粒度降低了。
+
+13.针对 ConcurrentHashMap 锁机制具体分析(JDK 1.7 VS JDK 1.8)？
+答：JDK 1.7 中，采用分段锁的机制，实现并发的更新操作，底层采用数组+链表的存储结构，包括两个核心静态内部类Segment和HashEntry。。
+a.Segment继承ReentrantLock(重入锁)用来充当锁的角色，每个Segment对象守护每个散列映射表的若干个桶；一个ConcurrentHashMap中包含一个Segment<K,V>[] segments 数组.
+b.HashEntry用来封装映射表的键-值对；一个Segment对象中包含一个HashEntry<K,V>[] table数组。
+c.每个桶是由若干个HashEntry对象链接起来的链表。一个HashEntry对象包含hash值，Key，Value，以及下一个HashEntry对象。
+
+JDK 1.8 中，采用Node + CAS + Synchronized来保证并发安全。取消类 Segment，直接用 table 数组存储键值对；
+当HashEntry对象组成的链表长度超过 TREEIFY_THRESHOLD 时，链表转换为红黑树，提升性能。底层变更为数组 + 链表 + 红黑树。
+
+14.ConcurrentHashMap 在 JDK 1.8 中，为什么要使用内置锁 synchronized 来代替重入锁 ReentrantLock？
+答：
+a.锁的粒度降低了，由之前的锁一个segment变为对Node进行上锁；
+b.Java开发团队没有放弃synchronized，而且基于JVM的synchronized优化空间更大，更自然；
+c.在大量的数据操作下，对于JVM的内存压力，基于API的ReentrantLock会开销更多的内存。
+
+15.ConcurrentHashMap 简单介绍？
+答：
+a.重要的常量：
+private transient volatile int sizeCtl;
+当为负数时，-1 表示正在初始化，-N 表示 N - 1 个线程正在进行扩容；
+当为 0 时，表示 table 还没有初始化；
+当为其他正数时，表示初始化或者下一次进行扩容的大小。
+
+b.数据结构：
+Node 是存储结构的基本单元，继承 HashMap 中的 Entry，用于存储数据；
+TreeNode 继承 Node，但是数据结构换成了二叉树结构，是红黑树的存储结构，用于红黑树中存储数据；
+TreeBin 是封装 TreeNode 的容器，提供转换红黑树的一些条件和锁的控制。
+
+c.存储对象时（put() 方法）：
+1.如果没有初始化，就调用 initTable() 方法来进行初始化；
+2.如果没有 hash 冲突就直接 CAS 无锁插入；
+3.如果需要扩容，就先进行扩容；
+4.如果存在 hash 冲突，就加锁来保证线程安全，两种情况：一种是链表形式就直接遍历到尾端插入，一种是红黑树就按照红黑树结构插入；
+5.如果该链表的数量大于阀值 8，就要先转换成红黑树的结构，break 再一次进入循环
+6.如果添加成功就调用 addCount() 方法统计 size，并且检查是否需要扩容。
+
+d.扩容方法 transfer()：默认容量为 16，扩容时，容量变为原来的两倍。
+helpTransfer()：调用多个工作线程一起帮助进行扩容，这样的效率就会更高。
+
+e.获取对象时（get()方法）：
+1.计算 hash 值，定位到该 table 索引位置，如果是首结点符合就返回；
+2.如果遇到扩容时，会调用标记正在扩容结点 ForwardingNode.find()方法，查找该结点，匹配就返回；
+3.以上都不符合的话，就往下遍历结点，匹配就返回，否则最后就返回 null。
+
+16.ConcurrentHashMap 的并发度是什么？
+答：程序运行时能够同时更新 ConcurrentHashMap 且不产生锁竞争的最大线程数。1.7中即为segment的数量，默认为16，且可以在构造函数中设置。当用户设置并发度时，
+ConcurrentHashMap 会使用大于等于该值的最小2幂指数作为实际并发度（假如用户设置并发度为17，实际并发度则为32）
+
+
+
+
+
 
 
